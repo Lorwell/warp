@@ -37,9 +37,21 @@ fn cache_path(target: &str) -> PathBuf {
         .join(target)
 }
 
+fn get_file_hash(path: &Path) -> io::Result<u64> {
+    let mut file = File::open(path)?;
+    let mut hasher = DefaultHasher::new();
+    io::copy(&mut file, &mut hasher)?;
+    Ok(hasher.finish())
+}
+
+// 在 extract 函数中保存哈希值
 fn extract(exe_path: &Path, cache_path: &Path) -> io::Result<()> {
     fs::remove_dir_all(cache_path).ok();
-    extractor::extract_to(&exe_path, &cache_path)?;
+    extractor::extract_to(exe_path, cache_path)?;
+
+    let hash = get_file_hash(exe_path)?;
+    let hash_path = cache_path.join(".hash");
+    fs::write(hash_path, hash.to_string())?;
     Ok(())
 }
 
@@ -62,20 +74,33 @@ fn main() -> Result<(), Box<Error>> {
     trace!("target_exec={:?}", target_file_name);
     trace!("target_path={:?}", target_path);
 
-    match fs::metadata(&cache_path) {
-        Ok(cache) => {
-            if cache.modified()? >= fs::metadata(&self_path)?.modified()? {
-                trace!("cache is up-to-date");
+// 在检查缓存时比较哈希值
+match fs::metadata(&cache_path) {
+    Ok(_) => {
+        let current_hash = get_file_hash(&self_path)?;
+        let hash_path = cache_path.join(".hash");
+        if let Ok(saved_hash) = fs::read_to_string(&hash_path) {
+            if let Ok(saved_hash) = saved_hash.parse::<u64>() {
+                if saved_hash == current_hash && target_path.exists() {
+                    trace!("cache is up-to-date");
+                } else {
+                    trace!("cache is outdated or target missing");
+                    extract(&self_path, &cache_path)?;
+                }
             } else {
-                trace!("cache is outdated");
+                trace!("invalid hash format, re-extracting");
                 extract(&self_path, &cache_path)?;
             }
-        }
-        Err(_) => {
-            trace!("cache not found");
+        } else {
+            trace!("hash file missing, re-extracting");
             extract(&self_path, &cache_path)?;
         }
     }
+    Err(_) => {
+        trace!("cache not found");
+        extract(&self_path, &cache_path)?;
+    }
+}
 
     let exit_code = executor::execute(&target_path)?;
     process::exit(exit_code);
