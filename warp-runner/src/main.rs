@@ -11,6 +11,8 @@ use std::fs;
 use std::io;
 use std::path::*;
 use std::process;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 mod extractor;
 mod executor;
@@ -38,9 +40,18 @@ fn cache_path(target: &str) -> PathBuf {
 }
 
 fn get_file_hash(path: &Path) -> io::Result<u64> {
-    let mut file = File::open(path)?;
+    use std::io::Read;
+
+    let mut file = fs::File::open(path)?;
     let mut hasher = DefaultHasher::new();
-    io::copy(&mut file, &mut hasher)?;
+    let mut buffer = [0; 1024];
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.write(&buffer[..bytes_read]);
+    }
     Ok(hasher.finish())
 }
 
@@ -55,7 +66,7 @@ fn extract(exe_path: &Path, cache_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     if env::var("WARP_TRACE").is_ok() {
         simple_logger::init_with_level(Level::Trace)?;
     }
