@@ -1,12 +1,7 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
   x86_64-pc-windows-gnu:
