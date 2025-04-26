@@ -9,54 +9,92 @@ on:
       - master
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        target: [x86_64-unknown-linux-gnu, x86_64-apple-darwin, x86_64-pc-windows-gnu]
-      fail-fast: false
-
+  x86_64-pc-windows-gnu:
+    runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: ${{ matrix.target }}
+          targets: x86_64-pc-windows-gnu
 
-      - name: Install strip tools (Linux and macOS)
-        if: matrix.os != 'windows-latest'
-        run: |
-          sudo apt-get update && sudo apt-get install -y binutils
-          brew install binutils || true
-
-      - name: Install strip tools (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Install strip tools
         run: |
           choco install mingw
 
-      - name: Build for ${{ matrix.target }}
+      - name: Build
         run: |
-          cargo build -p warp-runner --release --target ${{ matrix.target }}
-          cargo build -p warp-packer --release --target ${{ matrix.target }}
-
-      - name: Strip binaries (Linux and macOS)
-        if: matrix.os != 'windows-latest'
-        run: |
-          strip target/${{ matrix.target }}/release/warp-runner || true
-          strip target/${{ matrix.target }}/release/warp-packer || true
-
-      - name: Strip binaries (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          strip target/${{ matrix.target }}/release/warp-runner.exe || true
-          strip target/${{ matrix.target }}/release/warp-packer.exe || true
+          cargo build -p warp-runner --release --target x86_64-pc-windows-gnu
+          strip target/x86_64-pc-windows-gnu/release/warp-runner.exe
+          
+          cargo build -p warp-packer --release --target x86_64-pc-windows-gnu
+          strip target/x86_64-pc-windows-gnu/release/warp-packer.exe
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: build-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/
+          name: windows-x64.warp-packer.exe
+          path: target/x86_64-pc-windows-gnu/release/warp-packer.exe
+
+  x86_64-unknown-linux-gnu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install strip tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y binutils
+
+      - name: Build
+        run: |
+          cargo build -p warp-runner --release --target x86_64-unknown-linux-gnu
+          strip target/x86_64-unknown-linux-gnu/release/warp-runner
+          
+          cargo build -p warp-packer --release --target x86_64-unknown-linux-gnu
+          strip target/x86_64-unknown-linux-gnu/release/warp-packer
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-x64.warp-packer
+          path: target/x86_64-unknown-linux-gnu/release/warp-packer
+
+  x86_64-apple-darwin:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-apple-darwin
+
+      - name: Install strip tools
+        run: |
+          brew install binutils || true
+
+      - name: Build
+        run: |
+          CC=x86_64-apple-darwin15-clang cargo build -p warp-runner --release --target x86_64-apple-darwin
+          x86_64-apple-darwin15-strip target/x86_64-apple-darwin/release/warp-runner
+          
+          CC=x86_64-apple-darwin15-clang cargo build -p warp-packer --release --target x86_64-apple-darwin
+          x86_64-apple-darwin15-strip target/x86_64-apple-darwin/release/warp-packer
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-x64.warp-packer
+          path: target/x86_64-apple-darwin/release/warp-packer
