@@ -14,7 +14,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: x86_64-pc-windows-gnu, x86_64-unknown-linux-gnu, x86_64-apple-darwin
+#          targets: x86_64-pc-windows-gnu, x86_64-unknown-linux-gnu, x86_64-apple-darwin
+          targets: x86_64-pc-windows-gnu, x86_64-unknown-linux-gnu
 
       - name: Install Cross Compilation Tools
         run: |
@@ -22,10 +23,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64
           
-          # macOS 目标：使用 Zig 提供完整的交叉编译支持（包含 Clang 和 macOS SDK）
-          wget https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz
-          tar -xf zig-linux-x86_64-0.12.0.tar.xz
-          echo "$(pwd)/zig-linux-x86_64-0.12.0" >> $GITHUB_PATH
+#          # macOS 目标：使用 Zig 提供完整的交叉编译支持（包含 Clang 和 macOS SDK）
+#          wget https://ziglang.org/download/0.12.0/zig-linux-x86_64-0.12.0.tar.xz
+#          tar -xf zig-linux-x86_64-0.12.0.tar.xz
+#          echo "$(pwd)/zig-linux-x86_64-0.12.0" >> $GITHUB_PATH
           
           # Linux 目标：确保 strip 工具可用
           sudo apt-get install -y binutils
@@ -38,7 +39,7 @@ jobs:
           cargo build -p warp-runner --release --target x86_64-unknown-linux-gnu
           strip target/x86_64-unknown-linux-gnu/release/warp-runner
           
-          cargo zigbuild --release --target x86_64-apple-darwin -p warp-runner
+#          cargo zigbuild --release --target x86_64-apple-darwin -p warp-runner
           
           cargo build -p warp-runner --release --target x86_64-pc-windows-gnu
           strip target/x86_64-pc-windows-gnu/release/warp-runner.exe
@@ -46,7 +47,7 @@ jobs:
           cargo build -p warp-packer --release --target x86_64-unknown-linux-gnu
           strip target/x86_64-unknown-linux-gnu/release/warp-packer
           
-          cargo zigbuild --release --target x86_64-apple-darwin -p warp-packer
+#          cargo zigbuild --release --target x86_64-apple-darwin -p warp-packer
           
           cargo build -p warp-packer --release --target x86_64-pc-windows-gnu
           strip target/x86_64-pc-windows-gnu/release/warp-packer.exe
