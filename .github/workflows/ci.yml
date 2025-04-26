@@ -1,93 +1,69 @@
-name: CI
+name: Cross Build and Release
 
 on:
   workflow_dispatch:
 
 jobs:
-
-  build:
-    name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
-          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
-          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
-          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
-          - { target: x86_64-apple-darwin         , os: macos-10.15 }
-          - { target: x86_64-pc-windows-gnu       , os: windows-2022 }
-          # - { target: x86_64-pc-windows-msvc      , os: windows-2022                  }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-22.04 }
-          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+  cross-compile:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install prerequisites
-        shell: bash
-        run: |
-          case ${{ matrix.job.target }} in
-            x86_64-unknown-linux-gnu)
-              sudo apt-get -y update
-              sudo apt-get install -y \
-                 clang \
-                 cmake \
-                 curl \
-                 gcc \
-                 git \
-                 g++ \
-                 libpam0g-dev \
-                 libasound2-dev \
-                 libunwind-dev \
-                 libgstreamer1.0-dev \
-                 libgstreamer-plugins-base1.0-dev \
-                 libgtk-3-dev \
-                 libpulse-dev \
-                 libva-dev \
-                 libvdpau-dev \
-                 libxcb-randr0-dev \
-                 libxcb-shape0-dev \
-                 libxcb-xfixes0-dev \
-                 libxdo-dev \
-                 libxfixes-dev \
-                 nasm \
-                 wget
-              ;;
-            # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-            # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
+      - name: Install Rust and targets
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: ${{ matrix.job.target }}
-          components: ''
+          targets: x86_64-pc-windows-gnu, x86_64-unknown-linux-gnu, x86_64-apple-darwin
 
-      - name: Show version information (Rust, cargo, GCC)
-        shell: bash
+      - name: Install Cross Compilation Tools
         run: |
-          gcc --version || true
-          rustup -V
-          rustup toolchain list
-          rustup default
-          cargo -V
-          rustc -V
+          # Windows 工具链
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+          
+          # macOS 工具链 (使用 zig)
+          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz
+          tar -xf zig-linux-x86_64-0.11.0.tar.xz
+          echo "$(pwd)/zig-linux-x86_64-0.11.0" >> $GITHUB_PATH
+          
+          # Linux 工具链
+          sudo apt-get install -y binutils
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
 
-      - name: Build
-        uses: actions-rs/cargo@v1
+      - name: Build Windows Targets
+        run: |
+          cargo build --release -p warp-runner --target x86_64-pc-windows-gnu
+          x86_64-w64-mingw32-strip target/x86_64-pc-windows-gnu/release/warp-runner.exe
+          
+          cargo build --release -p warp-packer --target x86_64-pc-windows-gnu
+          x86_64-w64-mingw32-strip target/x86_64-pc-windows-gnu/release/warp-packer.exe
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+
+      - name: Build Linux Targets
+        run: |
+          cargo build --release -p warp-runner --target x86_64-unknown-linux-gnu
+          strip target/x86_64-unknown-linux-gnu/release/warp-runner
+          
+          cargo build --release -p warp-packer --target x86_64-unknown-linux-gnu
+          strip target/x86_64-unknown-linux-gnu/release/warp-packer
+
+      - name: Build macOS Targets
+        run: |
+          cargo zigbuild --release -p warp-runner --target x86_64-apple-darwin
+          zig strip target/x86_64-apple-darwin/release/warp-runner
+          
+          cargo zigbuild --release -p warp-packer --target x86_64-apple-darwin
+          zig strip target/x86_64-apple-darwin/release/warp-packer
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: build
-          args: --locked --target=${{ matrix.job.target }}
-
-      - name: clean
-        shell: bash
-        run: |
-          cargo clean
+          name: multi-platform-binaries
+          path: |
+            target/x86_64-pc-windows-gnu/release/warp-packer.exe
+            target/x86_64-unknown-linux-gnu/release/warp-packer
+            target/x86_64-apple-darwin/release/warp-packer
