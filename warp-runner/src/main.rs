@@ -53,12 +53,11 @@ fn cache_path(target: &str) -> PathBuf {
 }
 
 // 在 extract 函数中保存哈希值
-fn extract(exe_path: &Path, cache_path: &Path) -> io::Result<()> {
+fn extract(exe_path: &Path, cache_path: &Path, hash_path: &Path) -> io::Result<()> {
     fs::remove_dir_all(cache_path).ok();
     extractor::extract_to(exe_path, cache_path)?;
 
     let hash = target_hash_value();
-    let hash_path = cache_path.join(".hash");
     fs::write(hash_path, hash)?;
     Ok(())
 }
@@ -70,38 +69,39 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let self_path = env::current_exe()?;
     let self_file_name = self_path.file_name().unwrap();
-    let cache_path = cache_path(&self_file_name.to_string_lossy());
+    let cache_dir = cache_path(&self_file_name.to_string_lossy());
+    let hash_path = cache_path(&format!("{}.hash", self_file_name.to_string_lossy()));
 
     trace!("self_path={:?}", self_path);
     trace!("self_file_name={:?}", self_file_name);
-    trace!("cache_path={:?}", cache_path);
+    trace!("cache_dir={:?}", cache_dir);
+    trace!("hash_path={:?}", hash_path);
 
     let target_file_name = target_file_name();
-    let target_path = cache_path.join(target_file_name);
+    let target_path = cache_dir.join(target_file_name);
 
     trace!("target_exec={:?}", target_file_name);
     trace!("target_path={:?}", target_path);
 
     // 在检查缓存时比较哈希值
-    match fs::metadata(&cache_path) {
+    match fs::metadata(&cache_dir) {
         Ok(_) => {
             let current_hash = target_hash_value();
-            let hash_path = cache_path.join(".hash");
             if let Ok(saved_hash) = fs::read_to_string(&hash_path) {
                 if saved_hash == current_hash && target_path.exists() {
                     trace!("cache is up-to-date");
                 } else {
                     trace!("cache is outdated or target missing");
-                    extract(&self_path, &cache_path)?;
+                    extract(&self_path, &cache_dir, &hash_path)?;
                 }
             } else {
                 trace!("hash file missing, re-extracting");
-                extract(&self_path, &cache_path)?;
+                extract(&self_path, &cache_dir, &hash_path)?;
             }
         }
         Err(_) => {
             trace!("cache not found");
-            extract(&self_path, &cache_path)?;
+            extract(&self_path, &cache_dir, &hash_path)?;
         }
     }
 
