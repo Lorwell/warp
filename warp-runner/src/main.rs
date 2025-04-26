@@ -11,16 +11,16 @@ use std::fs;
 use std::io;
 use std::path::*;
 use std::process;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 
-mod extractor;
 mod executor;
+mod extractor;
 
 static TARGET_FILE_NAME_BUF: &'static [u8] = b"tVQhhsFFlGGD3oWV4lEPST8I8FEPP54IM0q7daes4E1y3p2U2wlJRYmWmjPYfkhZ0PlT14Ls0j8fdDkoj33f2BlRJavLj3mWGibJsGt5uLAtrCDtvxikZ8UX2mQDCrgE\0";
+static TARGET_HASH_VALUE_BUF: &'static [u8] = b"A2owjjTtZOpeQ4GdoXtrqzJ7dHGMnR3bbVGWRQqiiYkGI2eSN4PHXFoKbu5mqkNUliudXUOn0cgaN87WAuakXrD9k3yEdpSItXKXO3wdfWqJe4aISzSrOfm7gXCchXI5\0";
 
 fn target_file_name() -> &'static str {
-    let nul_pos = TARGET_FILE_NAME_BUF.iter()
+    let nul_pos = TARGET_FILE_NAME_BUF
+        .iter()
         .position(|elem| *elem == b'\0')
         .expect("TARGET_FILE_NAME_BUF has no NUL terminator");
 
@@ -31,6 +31,19 @@ fn target_file_name() -> &'static str {
         .expect("Can't convert TARGET_FILE_NAME_BUF CStr to str")
 }
 
+fn target_hash_value() -> &'static str {
+    let nul_pos = TARGET_HASH_VALUE_BUF
+        .iter()
+        .position(|elem| *elem == b'\0')
+        .expect("TARGET_HASH_VALUE_BUF has no NUL terminator");
+
+    let slice = &TARGET_HASH_VALUE_BUF[..(nul_pos + 1)];
+    CStr::from_bytes_with_nul(slice)
+        .expect("Can't convert TARGET_HASH_VALUE_BUF slice to CStr")
+        .to_str()
+        .expect("Can't convert TARGET_HASH_VALUE_BUF CStr to str")
+}
+
 fn cache_path(target: &str) -> PathBuf {
     dirs::data_local_dir()
         .expect("No data local dir found")
@@ -39,30 +52,14 @@ fn cache_path(target: &str) -> PathBuf {
         .join(target)
 }
 
-fn get_file_hash(path: &Path) -> io::Result<u64> {
-    use std::io::Read;
-
-    let mut file = fs::File::open(path)?;
-    let mut hasher = DefaultHasher::new();
-    let mut buffer = [0; 1024];
-    loop {
-        let bytes_read = file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.write(&buffer[..bytes_read]);
-    }
-    Ok(hasher.finish())
-}
-
 // 在 extract 函数中保存哈希值
 fn extract(exe_path: &Path, cache_path: &Path) -> io::Result<()> {
     fs::remove_dir_all(cache_path).ok();
     extractor::extract_to(exe_path, cache_path)?;
 
-    let hash = get_file_hash(exe_path)?;
+    let hash = target_hash_value();
     let hash_path = cache_path.join(".hash");
-    fs::write(hash_path, hash.to_string())?;
+    fs::write(hash_path, hash)?;
     Ok(())
 }
 
@@ -85,13 +82,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     trace!("target_exec={:?}", target_file_name);
     trace!("target_path={:?}", target_path);
 
-// 在检查缓存时比较哈希值
-match fs::metadata(&cache_path) {
-    Ok(_) => {
-        let current_hash = get_file_hash(&self_path)?;
-        let hash_path = cache_path.join(".hash");
-        if let Ok(saved_hash) = fs::read_to_string(&hash_path) {
-            if let Ok(saved_hash) = saved_hash.parse::<u64>() {
+    // 在检查缓存时比较哈希值
+    match fs::metadata(&cache_path) {
+        Ok(_) => {
+            let current_hash = target_hash_value();
+            let hash_path = cache_path.join(".hash");
+            if let Ok(saved_hash) = fs::read_to_string(&hash_path) {
                 if saved_hash == current_hash && target_path.exists() {
                     trace!("cache is up-to-date");
                 } else {
@@ -99,19 +95,15 @@ match fs::metadata(&cache_path) {
                     extract(&self_path, &cache_path)?;
                 }
             } else {
-                trace!("invalid hash format, re-extracting");
+                trace!("hash file missing, re-extracting");
                 extract(&self_path, &cache_path)?;
             }
-        } else {
-            trace!("hash file missing, re-extracting");
+        }
+        Err(_) => {
+            trace!("cache not found");
             extract(&self_path, &cache_path)?;
         }
     }
-    Err(_) => {
-        trace!("cache not found");
-        extract(&self_path, &cache_path)?;
-    }
-}
 
     let exit_code = executor::execute(&target_path)?;
     process::exit(exit_code);
