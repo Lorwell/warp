@@ -41,35 +41,35 @@ jobs:
 
       - name: Build Targets
         run: |
-          # Linux builds - build warp-runner first, then warp-packer (which depends on warp-runner)
+          # Linux builds
           cargo build -p warp-runner --release --target x86_64-unknown-linux-gnu
           strip target/x86_64-unknown-linux-gnu/release/warp-runner
 
           cargo build -p warp-packer --release --target x86_64-unknown-linux-gnu
           strip target/x86_64-unknown-linux-gnu/release/warp-packer
 
-          # Windows builds - build warp-runner first, then warp-packer (which depends on warp-runner.exe)
+          # Windows builds
           cargo build -p warp-runner --release --target x86_64-pc-windows-gnu
           strip target/x86_64-pc-windows-gnu/release/warp-runner.exe
 
           cargo build -p warp-packer --release --target x86_64-pc-windows-gnu
           strip target/x86_64-pc-windows-gnu/release/warp-packer.exe
 
-          # macOS builds - build warp-runner first, then warp-packer (which depends on warp-runner)
+          # macOS builds
           export PATH="/usr/local/osxcross/bin:$PATH"
           export CC=x86_64-apple-darwin14-clang
           export CXX=x86_64-apple-darwin14-clang++
-
+          
           cargo build -p warp-runner --release --target x86_64-apple-darwin
           x86_64-apple-darwin14-strip target/x86_64-apple-darwin/release/warp-runner
 
           cargo build -p warp-packer --release --target x86_64-apple-darwin
           x86_64-apple-darwin14-strip target/x86_64-apple-darwin/release/warp-packer
 
-          # macOS ARM64 builds - build warp-runner first, then warp-packer (which depends on warp-runner)
+          # macOS ARM64 builds
           export CC=aarch64-apple-darwin20-clang
           export CXX=aarch64-apple-darwin20-clang++
-
+          
           cargo build -p warp-runner --release --target aarch64-apple-darwin
           aarch64-apple-darwin20-strip target/aarch64-apple-darwin/release/warp-runner
 
